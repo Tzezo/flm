@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-use FLM::Handler;
+use FLM::App;
 
-my $flm_handler = new FLM::Handler();
- 
+my $flm = new FLM::App();
+$flm->Handler();
