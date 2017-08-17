@@ -28,4 +28,7 @@ dies_ok{ FLM::App->GetErrorRespObj("sys_err", {msg => "Test msg"}) } 'die test, 
 dies_ok{ FLM::App->GetErrorRespObj("sys_err", {code => "SYS01"}) } 'die test, missing msg from adit_params';
 lives_ok{ FLM::App->GetErrorRespObj("sys_err", {msg => "Test msg", code => "SYS01", extra_param => "TEST"}) } 'lives_ok test, added extra param in adit_params';
 
+dies_ok{ FLM::App->GetSuccessRespObj() } 'die test, missing result parameter';
+lives_ok{ FLM::App->GetSuccessRespObj("test") } 'lives_ok test';
+
 done_testing();
