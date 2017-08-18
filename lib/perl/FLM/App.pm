@@ -10,7 +10,9 @@ use Try::Tiny;
 use JSON;
 
 our $commands = {
-    upload_file => { proc => \&UploadFile, resp_type => 'json'}
+    upload_file => { proc => \&UploadFile, resp_type => 'json'},
+    get_files_list => { proc => \&GetFilesList, resp_type => 'json'},
+    get_file => { proc => \&GetFile },
 };
 
 sub new($)
@@ -45,17 +47,28 @@ sub Handler($)
 
         print CGI::header("-charset" => 'utf8');
 
+        my $resp_type = "";
+
         if(defined $$command{ resp_type })
         {
             if($$command{ resp_type } eq "json")
             {
+                $resp_type = $$command{ resp_type };
                 print CGI::header("-type" => "application/json"); 
             }
         }
 
         my $resp = $$command{ proc }->($self);
-        $resp = $self->GetSuccessRespObj($resp);
-        print to_json($resp);
+       
+        if($resp_type eq "json")
+        {
+            $resp = $self->GetSuccessRespObj($resp);
+            print to_json($resp);
+        }
+        else
+        {
+            print $resp;
+        }
 
         $$self{dbh}->commit();
     }
@@ -101,11 +114,87 @@ sub Handler($)
     };
 }
 
+sub GetFilesList($)
+{
+    my($self) = @_;
+
+    ASSERT(defined $self, "Undefined self", "SYS31");
+    
+    my $sth = $$self{dbh}->prepare("
+        SELECT *
+        FROM files
+        WHERE is_deleted IS FALSE
+        ORDER BY inserted_at DESC
+    ");
+
+    $sth->execute();
+
+    my $data = [];
+
+    while(my $row = $sth->fetchrow_hashref)
+    {
+        my $file_hash = {
+            name => $$row{ pub_name },
+            meta_data => from_json($$row{ meta_data_json }),
+            inserted_at => $$row{ inserted_at },
+            id => $$row{ id }
+        };
+
+        push @$data, $file_hash;
+    }
+
+    return $data;
+}
+
+sub GetFile($)
+{
+    my($self) = @_;
+
+    ASSERT(defined $self, "Undefined self", "SYS32");
+
+    my $file_id = $$self{cgi}->param('file_id');
+
+    ASSERT_PEER(defined $file_id, "Missing param file_id", "PEER12");
+
+    my $sth = $$self{dbh}->prepare("
+        SELECT F.*
+        FROM files F
+        WHERE F.id=?
+    ");
+
+    $sth->execute($file_id);
+
+    ASSERT_USER($sth->rows == 1, "File does not exists", "UI30");
+
+    my $row = $sth->fetchrow_hashref;
+    my $meta_data = from_json($$row{ meta_data_json });
+
+    my $mime_type = "application/octet-stream";
+
+    if(defined $$meta_data{ mime_type })
+    {
+        $mime_type = $$meta_data{ mime_type };
+    }
+
+    print CGI::header("-type" => $mime_type,
+                        "-attachment" => "$$row{ pub_name }");
+
+    open FILE, "$FLM::Config::FILES_DIR/$$row{ name }" or die "Can't open file $$row{ name }, $!";
+    my ($file, $buff);
+    while(read FILE, $buff, 1024) {
+        $file .= $buff;
+    }
+    close FILE;
+
+    return $file;
+}
+
 sub UploadFile($)
 {
     my($self) = @_;
 
-    #TODO - get file meta data
+    #TODO - Rename pub file name if already exists
+    #TODO - Add uuid for files as pub id
    
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
    
@@ -163,17 +252,6 @@ sub UploadFile($)
     }
 
     return $res;
-}
-
-sub CheckFileSize($$)
-{
-    my ($self, $file) = @_;
-
-    ASSERT(defined $file, "Undefined file", "SYS23");
-
-    my $file_info = stat($file);
-
-    TRACE("File info ", $file_info);
 }
 
 #RESP
