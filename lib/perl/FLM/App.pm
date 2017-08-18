@@ -22,6 +22,9 @@ sub new($)
         dbh => DBI->connect("dbi:Pg:dbname=$FLM::Config::dbi_dbName;host=$FLM::Config::dbi_dbHost;port=$FLM::Config::dbi_dbPort;", $FLM::Config::dbi_dbUser, $FLM::Config::Auth),
     };
 
+    $$self{dbh}->{AutoCommit} = 0;
+    $$self{dbh}->{RaiseError} = 1;
+
     bless $self, $class;
     return $self; 
 }
@@ -53,10 +56,14 @@ sub Handler($)
         my $resp = $$command{ proc }->($self);
         $resp = $self->GetSuccessRespObj($resp);
         print to_json($resp);
+
+        $$self{dbh}->commit();
     }
     catch
     {
         my($err, $err_data) = @_;
+
+        $$self{dbh}->rollback();
 
         TRACE("BOOM ", $err, $err_data);
 
@@ -99,11 +106,47 @@ sub UploadFile($)
     my($self) = @_;
 
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
+   
+    my $files = $$self{cgi}->param('file');
+    
+    if(ref $files ne "ARRAY")
+    {
+        $files = [$files];
+    }
+    
+    my $res = [];
 
-    return "Upload file Handler";
-    #print "Upload File Handler";
+    for(my $i = 0; $i < @$files; $i++)
+    {
+        my $file_name = $$files[ $i ];
+        my $mime_type = $$self{cgi}->uploadInfo($file_name)->{'Content-Type'};
+        my $tmp_file_name = $$self{cgi}->tmpFileName($file_name);
+
+        my ($ext) = $file_name =~ /(\.[^.]+)$/;
+
+        my $intern_file_name = "file_".time()."_$$"."_$i".$ext;
+        
+        my $rows = $self->InsertInto("files", {
+            name => $intern_file_name,
+            pub_name => "$file_name",
+            meta_data_json => to_json({mime_type => $mime_type}),
+        });
+
+        ASSERT_USER($rows == 1, "Upload failed", "UI01");
+
+        move($tmp_file_name, "$FLM::Config::FILES_DIR/$intern_file_name") or die "$!";
+        
+        push @$res, {
+            file_name => "$file_name",
+            mime_type => $mime_type,
+            tmp_file_name => $tmp_file_name
+        };
+    }
+ 
+    return $res;
 }
 
+#RESP
 sub GetErrorRespObj($$$)
 {
     my($self, $status, $adit_data) = @_;
@@ -128,6 +171,12 @@ sub GetSuccessRespObj($$)
     ASSERT(defined $self, "Undefined self", "SYS10");
     ASSERT(defined $result, "Undefined result", "SYS12");
     
+    #if(ref $result eq "HASH"
+    #    || ref $result eq "ARRAY")
+    #{
+    #    $result = to_json($result);
+    #}
+ 
     return $self->GetRespObj("ok", { result => $result });
 }
 
@@ -157,6 +206,36 @@ sub GetRespObj($$;$)
     }
 
     return $resp;
+}
+
+#DB
+sub InsertInto($$$)
+{
+    my($self, $table, $data) = @_;
+
+    ASSERT(defined $self, "Undefined self", "SYS20");
+    ASSERT(defined $table, "Undefined table", "SYS21");
+    ASSERT(defined $data, "Undefined data", "SYS22");
+
+    $table = $$self{dbh}->quote_identifier( $table );
+
+    my $cols = [];
+    my $vals = [];
+
+    while(my($key, $val) = each(%$data))
+    {
+        push(@$cols, $$self{dbh}->quote_identifier( $key ));
+        push(@$vals, $$self{dbh}->quote( $val ));
+    }
+    
+    my $cols_str = join ", ", @$cols;
+    my $vals_str = join ", ", @$vals;
+
+    my $query = "INSERT INTO $table ($cols_str) VALUES ($vals_str)";   
+    
+    my $rows = $$self{dbh}->do($query) or die "$!";
+    TRACE("Rowsss ", $rows, $query);
+    return $rows;
 }
 
 1;
