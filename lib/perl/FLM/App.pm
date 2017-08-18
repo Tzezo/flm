@@ -105,6 +105,8 @@ sub UploadFile($)
 {
     my($self) = @_;
 
+    #TODO - get file meta data
+   
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
    
     my $files = $$self{cgi}->param('file');
@@ -115,12 +117,17 @@ sub UploadFile($)
     }
     
     my $res = [];
+    my $upld_files_arr = [];
 
     for(my $i = 0; $i < @$files; $i++)
     {
-        my $file_name = $$files[ $i ];
-        my $mime_type = $$self{cgi}->uploadInfo($file_name)->{'Content-Type'};
-        my $tmp_file_name = $$self{cgi}->tmpFileName($file_name);
+        my $file = $$files[ $i ];
+        my $file_name = "$$files[ $i ]";
+        my $mime_type = $$self{cgi}->uploadInfo($file)->{'Content-Type'};
+        my $tmp_file_name = $$self{cgi}->tmpFileName($file);
+
+        my $file_size_b = -s $tmp_file_name;
+        ASSERT_USER($file_size_b <= $FLM::Config::MAX_FILE_SIZE, "Reached file size for $file_name, Allowed file size is $FLM::Config::MAX_FILE_SIZE Bytes", "UI02");
 
         my ($ext) = $file_name =~ /(\.[^.]+)$/;
 
@@ -128,22 +135,45 @@ sub UploadFile($)
         
         my $rows = $self->InsertInto("files", {
             name => $intern_file_name,
-            pub_name => "$file_name",
-            meta_data_json => to_json({mime_type => $mime_type}),
+            pub_name => $file_name,
+            meta_data_json => to_json({
+                mime_type => $mime_type,
+                file_size_bytes => $file_size_b,
+                ext => $ext,
+            }),
         });
 
         ASSERT_USER($rows == 1, "Upload failed", "UI01");
 
-        move($tmp_file_name, "$FLM::Config::FILES_DIR/$intern_file_name") or die "$!";
+        push @$upld_files_arr, {
+            tmp_file_path => $tmp_file_name,
+            intern_file_name => $intern_file_name
+        };
         
         push @$res, {
-            file_name => "$file_name",
+            file_name => $file_name,
             mime_type => $mime_type,
             tmp_file_name => $tmp_file_name
         };
     }
  
+    for(my $i = 0; $i < @$upld_files_arr; $i++)
+    {
+        move($$upld_files_arr[ $i ]{ tmp_file_path }, "$FLM::Config::FILES_DIR/$$upld_files_arr[ $i ]{ intern_file_name }");
+    }
+
     return $res;
+}
+
+sub CheckFileSize($$)
+{
+    my ($self, $file) = @_;
+
+    ASSERT(defined $file, "Undefined file", "SYS23");
+
+    my $file_info = stat($file);
+
+    TRACE("File info ", $file_info);
 }
 
 #RESP
