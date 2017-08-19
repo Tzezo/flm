@@ -14,8 +14,9 @@ use JSON;
 our $commands = {
     upload_file => { proc => \&UploadFile, resp_type => 'json'},
     get_files_list => { proc => \&GetFilesList, resp_type => 'json'},
-    download_file => { proc => \&DownloadFile },
+    get_file_data => { proc => \&GetFileData, resp_type => 'json'},
     delete_file => { proc => \&DeleteFile, resp_type => "json" },
+    download_file => { proc => \&DownloadFile },
 };
 
 sub new($)
@@ -89,7 +90,9 @@ sub Handler($)
 
         my $resp = undef;
     
-        if(defined $err && ref $err eq "HASH" && defined $$err{type})
+        if(defined $err 
+            && ref $err eq "HASH" 
+            && defined $$err{type})
         {
             if($$err{type} eq "SYSERR")
             {
@@ -119,6 +122,35 @@ sub Handler($)
             die;
         }
     };
+}
+
+sub GetFileData($)
+{
+    my($self) = @_;
+
+    ASSERT(defined $self, "Undefined self", "SYS32");
+    
+    my $file_id = $$self{cgi}->param('file_id');
+    ASSERT_PEER(defined $file_id, "Missing param file_id", "PEER13");
+
+    my $sth = $$self{dbh}->prepare("
+        SELECT F.*
+        FROM files F
+        WHERE F.id=?
+            AND F.is_deleted IS FALSE
+    ");
+    
+    $sth->execute($file_id);
+
+    ASSERT_USER($sth->rows == 1, "File does not exists!", "UI41");
+    
+    my $row = $sth->fetchrow_hashref();
+
+    return {
+        name => $$row{ pub_name },
+        meta_data => from_json($$row{ meta_data_json }),
+        inserted_at => $$row{ inserted_at }
+    }; 
 }
 
 sub GetFilesList($)
