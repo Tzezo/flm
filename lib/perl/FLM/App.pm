@@ -227,7 +227,6 @@ sub UploadFile($)
 
     #TODO - Rename pub file name if already exists
     #TODO - Add uuid for files as pub id
-    #TODO - Max Number of uploaded files
      
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
    
@@ -237,7 +236,21 @@ sub UploadFile($)
     {
         $files = [$files];
     }
-    
+  
+    #File Count Check
+    my $sth = $$self{dbh}->prepare("
+        SELECT COUNT(F.id) + ? AS files_count
+        FROM files F
+        WHERE F.is_deleted IS FALSE
+    "); 
+
+    $sth->execute(scalar @$files);
+
+    my $row = $sth->fetchrow_hashref;
+
+    ASSERT_USER($$row{files_count} <= $FLM::Config::MAX_UPLOADED_FILES, "Maximum number of uploaded files is $FLM::Config::MAX_UPLOADED_FILES", "UI05");
+    #File Count Check
+  
     my $res = [];
     my $upld_files_arr = [];
 
@@ -257,9 +270,10 @@ sub UploadFile($)
         my $mime_type = $$self{mt}->type($file_type);
         $mime_type = defined $mime_type ? "$mime_type" : "$file_type";
 
-        ASSERT_USER(!defined $$self{forbid_file_types}{ $mime_type }, "File type is not allowed!", "UI03");
-
         my ($ext) = $file_name =~ /(\.[^.]+)$/;
+
+        ASSERT_USER(!defined $$self{forbid_file_types}{ $mime_type }
+                     && !defined $$self{forbid_file_types}{ $ext }, "File type is not allowed!", "UI03");
 
         my $intern_file_name = "file_".time()."_$$"."_$i".$ext;
         
@@ -315,6 +329,8 @@ sub GetForbidFileTypes($)
         {
             $$forbid_file_types_hash{ $mime_type } = 1;
         }
+        
+        $$forbid_file_types_hash{ $$forbid_file_types_arr[ $i ] } = 1;
     }
 
     return $forbid_file_types_hash;
