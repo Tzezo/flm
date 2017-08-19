@@ -6,13 +6,16 @@ use FLM::Common::Errors;
 use CGI;
 use DBI;
 use File::Copy;
+use File::Type;
+use MIME::Types;
 use Try::Tiny;
 use JSON;
 
 our $commands = {
     upload_file => { proc => \&UploadFile, resp_type => 'json'},
     get_files_list => { proc => \&GetFilesList, resp_type => 'json'},
-    get_file => { proc => \&GetFile },
+    download_file => { proc => \&DownloadFile },
+    delete_file => { proc => \&DeleteFile, resp_type => "json" },
 };
 
 sub new($)
@@ -22,6 +25,8 @@ sub new($)
     my $self = {
         cgi => new CGI(),
         dbh => DBI->connect("dbi:Pg:dbname=$FLM::Config::dbi_dbName;host=$FLM::Config::dbi_dbHost;port=$FLM::Config::dbi_dbPort;", $FLM::Config::dbi_dbUser, $FLM::Config::Auth),
+        mt  => MIME::Types->new(),
+        ft  => File::Type->new(),
     };
 
     $$self{dbh}->{AutoCommit} = 0;
@@ -38,6 +43,8 @@ sub Handler($)
     try
     {
         TRACE($$self{cgi}); 
+
+        $$self{forbid_file_types} = defined $$self{forbid_file_types} ? $$self{forbid_file_types} : $self->GetForbidFileTypes();
         
         my $method = $$self{cgi}->param('method');
         ASSERT(defined $method, "method is undefined", "SYS01");
@@ -146,7 +153,7 @@ sub GetFilesList($)
     return $data;
 }
 
-sub GetFile($)
+sub DownloadFile($)
 {
     my($self) = @_;
 
@@ -160,6 +167,7 @@ sub GetFile($)
         SELECT F.*
         FROM files F
         WHERE F.id=?
+            AND F.is_deleted IS FALSE
     ");
 
     $sth->execute($file_id);
@@ -189,13 +197,38 @@ sub GetFile($)
     return $file;
 }
 
+sub DeleteFile($)
+{
+    my($self) = @_;
+
+    #TODO - return file info hash
+
+    ASSERT(defined $self, "Undefined self", "SYS32");
+
+    my $file_id = $$self{cgi}->param('file_id');
+
+    ASSERT_PEER(defined $file_id, "Missing param file_id", "PEER13");
+
+    my $rows = $$self{dbh}->do("
+        UPDATE files
+        SET is_deleted=TRUE
+        WHERE id=?
+            AND is_deleted IS FALSE
+    ", undef, $file_id);
+
+    ASSERT_USER($rows == 1, "File does not exists", "UI30");
+
+    return {}; 
+}
+
 sub UploadFile($)
 {
     my($self) = @_;
 
     #TODO - Rename pub file name if already exists
     #TODO - Add uuid for files as pub id
-   
+    #TODO - Max Number of uploaded files
+     
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
    
     my $files = $$self{cgi}->param('file');
@@ -212,11 +245,19 @@ sub UploadFile($)
     {
         my $file = $$files[ $i ];
         my $file_name = "$$files[ $i ]";
-        my $mime_type = $$self{cgi}->uploadInfo($file)->{'Content-Type'};
         my $tmp_file_name = $$self{cgi}->tmpFileName($file);
 
-        my $file_size_b = -s $tmp_file_name;
+        my @file_stat = stat($tmp_file_name);
+
+        my $file_size_b = $file_stat[7];
+
         ASSERT_USER($file_size_b <= $FLM::Config::MAX_FILE_SIZE, "Reached file size for $file_name, Allowed file size is $FLM::Config::MAX_FILE_SIZE Bytes", "UI02");
+
+        my $file_type = $$self{ft}->checktype_filename($tmp_file_name);
+        my $mime_type = $$self{mt}->type($file_type);
+        $mime_type = defined $mime_type ? "$mime_type" : "$file_type";
+
+        ASSERT_USER(!defined $$self{forbid_file_types}{ $mime_type }, "File type is not allowed!", "UI03");
 
         my ($ext) = $file_name =~ /(\.[^.]+)$/;
 
@@ -228,6 +269,9 @@ sub UploadFile($)
             meta_data_json => to_json({
                 mime_type => $mime_type,
                 file_size_bytes => $file_size_b,
+                file_atime => $file_stat[8],
+                file_mtime => $file_stat[9],
+                file_ctime => $file_stat[10],
                 ext => $ext,
             }),
         });
@@ -252,6 +296,28 @@ sub UploadFile($)
     }
 
     return $res;
+}
+
+sub GetForbidFileTypes($)
+{
+    my($self) = @_;
+    
+    ASSERT(defined $self, "Undefined self", "SYS40");
+    
+    my $forbid_file_types_arr = $FLM::Config::FORBIDDEN_FILE_EXT;  
+    my $forbid_file_types_hash = {};
+    
+    for(my $i = 0; $i < @$forbid_file_types_arr; $i++)
+    {
+        my $mime_type = $$self{mt}->mimeTypeOf($$forbid_file_types_arr[ $i ]);
+
+        if(defined $mime_type)
+        {
+            $$forbid_file_types_hash{ $mime_type } = 1;
+        }
+    }
+
+    return $forbid_file_types_hash;
 }
 
 #RESP
@@ -279,12 +345,6 @@ sub GetSuccessRespObj($$)
     ASSERT(defined $self, "Undefined self", "SYS10");
     ASSERT(defined $result, "Undefined result", "SYS12");
     
-    #if(ref $result eq "HASH"
-    #    || ref $result eq "ARRAY")
-    #{
-    #    $result = to_json($result);
-    #}
- 
     return $self->GetRespObj("ok", { result => $result });
 }
 

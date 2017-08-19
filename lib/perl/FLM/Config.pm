@@ -21,7 +21,7 @@ BEGIN
 
     $FILES_DIR = "/var/www/files/";
 
-    $FORBIDDEN_FILE_EXT = [];
+    $FORBIDDEN_FILE_EXT = []; #example: ".jpg", ".png"
     $MAX_FILE_SIZE = 5 * 1024 * 1024; #Bytes
     $MAX_UPLOADED_FILES = 15; 
 }
