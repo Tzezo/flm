@@ -4,7 +4,7 @@ use strict;
 use FLM::Config;
 use FLM::Common::Errors;
 use CGI;
-use DBI;
+use FLM::Common::DBIHelper;
 use File::Copy;
 use File::Type;
 use MIME::Types;
@@ -12,11 +12,11 @@ use Try::Tiny;
 use JSON;
 
 our $commands = {
-    upload_file => { proc => \&UploadFile, resp_type => 'json'},
-    get_files_list => { proc => \&GetFilesList, resp_type => 'json'},
-    get_file_data => { proc => \&GetFileData, resp_type => 'json'},
-    delete_file => { proc => \&DeleteFile, resp_type => "json" },
-    download_file => { proc => \&DownloadFile },
+    upload_file => { proc => \&UploadFile, resp_type => 'json', method => 'POST'},
+    get_files_list => { proc => \&GetFilesList, resp_type => 'json', method => 'GET'},
+    get_file_data => { proc => \&GetFileData, resp_type => 'json', method => 'GET'},
+    delete_file => { proc => \&DeleteFile, resp_type => "json", method => 'DELETE' },
+    download_file => { proc => \&DownloadFile, method => 'GET' },
 };
 
 sub new($)
@@ -25,13 +25,16 @@ sub new($)
 
     my $self = {
         cgi => new CGI(),
-        dbh => DBI->connect("dbi:Pg:dbname=$FLM::Config::dbi_dbName;host=$FLM::Config::dbi_dbHost;port=$FLM::Config::dbi_dbPort;", $FLM::Config::dbi_dbUser, $FLM::Config::Auth),
+        dbh => FLM::Common::DBIHelper->connect_transact({
+            dbname => $FLM::Config::dbi_dbName,
+            host => $FLM::Config::dbi_dbHost,
+            port => $FLM::Config::dbi_dbPort,
+            user => $FLM::Config::dbi_dbUser,
+            pass => $FLM::Config::Auth
+        }),
         mt  => MIME::Types->new(),
         ft  => File::Type->new(),
     };
-
-    $$self{dbh}->{AutoCommit} = 0;
-    $$self{dbh}->{RaiseError} = 1;
 
     bless $self, $class;
     return $self; 
@@ -45,13 +48,17 @@ sub Handler($)
     {
         TRACE($$self{cgi}); 
 
-        $$self{forbid_file_types} = defined $$self{forbid_file_types} ? $$self{forbid_file_types} : $self->GetForbidFileTypes();
+        $$self{forbid_file_types} = defined $$self{forbid_file_types} ? $$self{forbid_file_types} : $self->_GetForbidFileTypes();
         
         my $method = $$self{cgi}->param('method');
         ASSERT(defined $method, "method is undefined", "SYS01");
         ASSERT_PEER(defined $$commands{ $method }, "Method not found", "PEER01"); 
 
         my $command = $$commands{ $method };
+
+        ASSERT(defined $$command{ method }, "Undefined command method", "SYS71");
+    
+        ASSERT_USER($ENV{'REQUEST_METHOD'} eq $$command{ method }, "Wrong Request Method", "UI33");
 
         print CGI::header("-charset" => 'utf8');
 
@@ -70,7 +77,7 @@ sub Handler($)
        
         if($resp_type eq "json")
         {
-            $resp = $self->GetSuccessRespObj($resp);
+            $resp = $self->_GetSuccessRespObj($resp);
             print to_json($resp);
         }
         else
@@ -96,20 +103,20 @@ sub Handler($)
         {
             if($$err{type} eq "SYSERR")
             {
-                $resp = $self->GetErrorRespObj("sys_err", {code => "SYS000", msg => "Something went wrong, please try again!"});
+                $resp = $self->_GetErrorRespObj("sys_err", {code => "SYS000", msg => "Something went wrong, please try again!"});
             }
             elsif($$err{type} eq "PEERERR")
             {
-                $resp = $self->GetErrorRespObj("peer_err", {code => $$err{code}, msg => "Client system error!"});
+                $resp = $self->_GetErrorRespObj("peer_err", {code => $$err{code}, msg => "Client system error!"});
             }
             elsif($$err{type} eq "USERERR")
             {
-                $resp = $self->GetErrorRespObj("user_err", {code => $$err{code}, msg => $$err{msg}});
+                $resp = $self->_GetErrorRespObj("user_err", {code => $$err{code}, msg => $$err{msg}});
             }
         }
         else
         {
-            $resp = $self->GetErrorRespObj("sys_err", {code => "SYS000", msg => "Something went wrong, please try again!"});
+            $resp = $self->_GetErrorRespObj("sys_err", {code => "SYS000", msg => "Something went wrong, please try again!"});
         }
 
         if(defined $resp)
@@ -132,7 +139,7 @@ sub GetFileData($)
     
     my $file_id = $$self{cgi}->param('file_id');
     ASSERT_PEER(defined $file_id, "Missing param file_id", "PEER13");
-
+    
     my $sth = $$self{dbh}->prepare("
         SELECT F.*
         FROM files F
@@ -146,11 +153,7 @@ sub GetFileData($)
     
     my $row = $sth->fetchrow_hashref();
 
-    return {
-        name => $$row{ pub_name },
-        meta_data => from_json($$row{ meta_data_json }),
-        inserted_at => $$row{ inserted_at }
-    }; 
+    return $self->_GetFileObj($row);
 }
 
 sub GetFilesList($)
@@ -172,14 +175,7 @@ sub GetFilesList($)
 
     while(my $row = $sth->fetchrow_hashref)
     {
-        my $file_hash = {
-            name => $$row{ pub_name },
-            meta_data => from_json($$row{ meta_data_json }),
-            inserted_at => $$row{ inserted_at },
-            id => $$row{ id }
-        };
-
-        push @$data, $file_hash;
+        push @$data, $self->_GetFileObj($row);
     }
 
     return $data;
@@ -233,31 +229,33 @@ sub DeleteFile($)
 {
     my($self) = @_;
 
-    #TODO - return file info hash
-
     ASSERT(defined $self, "Undefined self", "SYS32");
 
     my $file_id = $$self{cgi}->param('file_id');
 
     ASSERT_PEER(defined $file_id, "Missing param file_id", "PEER13");
 
-    my $rows = $$self{dbh}->do("
+    my $sth = $$self{dbh}->prepare("
         UPDATE files
         SET is_deleted=TRUE
         WHERE id=?
             AND is_deleted IS FALSE
-    ", undef, $file_id);
+        RETURNING *
+    ");
 
-    ASSERT_USER($rows == 1, "File does not exists", "UI30");
+    $sth->execute($file_id);
 
-    return {}; 
+    ASSERT_USER($sth->rows == 1, "File does not exists", "UI30");
+
+    my $row = $sth->fetchrow_hashref;
+
+    return $self->_GetFileObj($row); 
 }
 
 sub UploadFile($)
 {
     my($self) = @_;
 
-    #TODO - Rename pub file name if already exists
     #TODO - Add uuid for files as pub id
      
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
@@ -269,19 +267,7 @@ sub UploadFile($)
         $files = [$files];
     }
   
-    #File Count Check
-    my $sth = $$self{dbh}->prepare("
-        SELECT COUNT(F.id) + ? AS files_count
-        FROM files F
-        WHERE F.is_deleted IS FALSE
-    "); 
-
-    $sth->execute(scalar @$files);
-
-    my $row = $sth->fetchrow_hashref;
-
-    ASSERT_USER($$row{files_count} <= $FLM::Config::MAX_UPLOADED_FILES, "Maximum number of uploaded files is $FLM::Config::MAX_UPLOADED_FILES", "UI05");
-    #File Count Check
+    $self->_CheckUploadedFilesNumber( scalar @$files );
   
     my $res = [];
     my $upld_files_arr = [];
@@ -294,14 +280,10 @@ sub UploadFile($)
 
         my @file_stat = stat($tmp_file_name);
 
-        my $file_size_b = $file_stat[7];
-
-        ASSERT_USER($file_size_b <= $FLM::Config::MAX_FILE_SIZE, "Reached file size for $file_name, Allowed file size is $FLM::Config::MAX_FILE_SIZE Bytes", "UI02");
-
-        my $file_type = $$self{ft}->checktype_filename($tmp_file_name);
-        my $mime_type = $$self{mt}->type($file_type);
-        $mime_type = defined $mime_type ? "$mime_type" : "$file_type";
-
+        $self->_CheckUploadedFileSize($tmp_file_name, $file_name);
+ 
+        my $mime_type = $self->_GetFileMimeType($tmp_file_name);
+  
         my ($ext) = $file_name =~ /(\.[^.]+)$/;
 
         ASSERT_USER(!defined $$self{forbid_file_types}{ $mime_type }
@@ -309,12 +291,13 @@ sub UploadFile($)
 
         my $intern_file_name = "file_".time()."_$$"."_$i".$ext;
         
-        my $rows = $self->InsertInto("files", {
+        my $row = $$self{dbh}->InsertInto("files", {
             name => $intern_file_name,
-            pub_name => $file_name,
+            orig_name => $file_name,
+            pub_name => $self->_GetFilePubName($file_name),
             meta_data_json => to_json({
                 mime_type => $mime_type,
-                file_size_bytes => $file_size_b,
+                file_size_bytes => $file_stat[7],
                 file_atime => $file_stat[8],
                 file_mtime => $file_stat[9],
                 file_ctime => $file_stat[10],
@@ -322,18 +305,12 @@ sub UploadFile($)
             }),
         });
 
-        ASSERT_USER($rows == 1, "Upload failed", "UI01");
-
         push @$upld_files_arr, {
             tmp_file_path => $tmp_file_name,
             intern_file_name => $intern_file_name
         };
         
-        push @$res, {
-            file_name => $file_name,
-            mime_type => $mime_type,
-            tmp_file_name => $tmp_file_name
-        };
+        push @$res, $self->_GetFileObj($row);
     }
  
     for(my $i = 0; $i < @$upld_files_arr; $i++)
@@ -344,11 +321,85 @@ sub UploadFile($)
     return $res;
 }
 
-sub GetForbidFileTypes($)
+sub _GetFilePubName($$)
+{
+    my($self, $file_orig_name) = @_;
+
+    ASSERT(defined $file_orig_name, "Undefined file_orig_name", "SYS58");
+
+    my $sth = $$self{dbh}->prepare("
+        SELECT COUNT(id) AS count
+        FROM files
+        WHERE orig_name = ?
+    ");
+
+    $sth->execute($file_orig_name);
+
+    my $row = $sth->fetchrow_hashref;
+
+    if($$row{ count } > 0)
+    {
+        my @arr = split(/\./, $file_orig_name);
+        
+        $file_orig_name = "$arr[0] ($$row{ count }).".join('.', @arr[ 1 .. $#arr ]);  
+        return $file_orig_name;
+    }
+
+    return $file_orig_name;
+}
+
+sub _CheckUploadedFilesNumber($$)
+{
+    my($self, $new_files_num) = @_;
+
+    ASSERT(defined $new_files_num, "Undefined new_files_num parameter", "SYS55");
+
+    my $sth = $$self{dbh}->prepare("
+        SELECT COUNT(F.id) + ? AS files_count
+        FROM files F
+        WHERE F.is_deleted IS FALSE
+    "); 
+
+    $sth->execute( $new_files_num );
+
+    my $row = $sth->fetchrow_hashref;
+
+    ASSERT_USER($$row{files_count} <= $FLM::Config::MAX_UPLOADED_FILES, "Maximum number of uploaded files is $FLM::Config::MAX_UPLOADED_FILES", "UI05");
+   
+    return 1; 
+}
+
+sub _CheckUploadedFileSize($$$)
+{
+    my($self, $file_path, $file_name) = @_;
+
+    ASSERT(defined $file_path, "Undefined file_path parameter", "SYS56");
+    ASSERT(defined $file_name, "Undefined file_name parameter", "SYS57");
+
+    my @file_stat = stat($file_path);
+    my $file_size_b = $file_stat[7];
+    
+    ASSERT_USER($file_size_b <= $FLM::Config::MAX_FILE_SIZE, "Reached file size for $file_name, Allowed file size is $FLM::Config::MAX_FILE_SIZE Bytes", "UI02");
+    
+    return 1;
+}
+
+sub _GetFileMimeType($$)
+{
+    my($self, $file_path) = @_;
+
+    ASSERT(defined $file_path, "Undefined file_path parameter", "SYS58");
+
+    my $file_type = $$self{ft}->checktype_filename($file_path);
+    my $mime_type = $$self{mt}->type($file_type);
+    $mime_type = defined $mime_type ? "$mime_type" : "$file_type";
+
+    return $mime_type;
+}
+
+sub _GetForbidFileTypes($)
 {
     my($self) = @_;
-    
-    ASSERT(defined $self, "Undefined self", "SYS40");
     
     my $forbid_file_types_arr = $FLM::Config::FORBIDDEN_FILE_EXT;  
     my $forbid_file_types_hash = {};
@@ -368,8 +419,29 @@ sub GetForbidFileTypes($)
     return $forbid_file_types_hash;
 }
 
+sub _GetFileObj($$)
+{
+    my($self, $file_row) = @_;
+
+    ASSERT(defined $file_row, "Undefined file_row", "SYS53");
+
+    ASSERT(defined $$file_row{ id }, "Missing file id", "SYS54");
+    ASSERT(defined $$file_row{ pub_name }, "Missing file pub name", "SYS55");
+    ASSERT(defined $$file_row{ meta_data_json }, "Missing file meta data json", "SYS56");
+    ASSERT(defined $$file_row{ inserted_at }, "Missing file inserted_at", "SYS57");
+
+    my $file_hash = {
+        id => $$file_row{ id },
+        name => $$file_row{ pub_name },
+        meta_data => from_json($$file_row{ meta_data_json }),
+        inserted_at => $$file_row{ inserted_at }
+    };
+
+    return $file_hash;
+}
+
 #RESP
-sub GetErrorRespObj($$$)
+sub _GetErrorRespObj($$$)
 {
     my($self, $status, $adit_data) = @_;
     
@@ -383,20 +455,20 @@ sub GetErrorRespObj($$$)
             $status eq "peer_err" ||
             $status eq "user_err", "Invalid status", "SYS09");
 
-    return $self->GetRespObj($status, $adit_data);
+    return $self->_GetRespObj($status, $adit_data);
 }
 
-sub GetSuccessRespObj($$)
+sub _GetSuccessRespObj($$)
 {
     my($self, $result) = @_;
 
     ASSERT(defined $self, "Undefined self", "SYS10");
     ASSERT(defined $result, "Undefined result", "SYS12");
     
-    return $self->GetRespObj("ok", { result => $result });
+    return $self->_GetRespObj("ok", { result => $result });
 }
 
-sub GetRespObj($$;$)
+sub _GetRespObj($$;$)
 {
     my($self, $status, $adit_data) = @_;
 
@@ -422,36 +494,6 @@ sub GetRespObj($$;$)
     }
 
     return $resp;
-}
-
-#DB
-sub InsertInto($$$)
-{
-    my($self, $table, $data) = @_;
-
-    ASSERT(defined $self, "Undefined self", "SYS20");
-    ASSERT(defined $table, "Undefined table", "SYS21");
-    ASSERT(defined $data, "Undefined data", "SYS22");
-
-    $table = $$self{dbh}->quote_identifier( $table );
-
-    my $cols = [];
-    my $vals = [];
-
-    while(my($key, $val) = each(%$data))
-    {
-        push(@$cols, $$self{dbh}->quote_identifier( $key ));
-        push(@$vals, $$self{dbh}->quote( $val ));
-    }
-    
-    my $cols_str = join ", ", @$cols;
-    my $vals_str = join ", ", @$vals;
-
-    my $query = "INSERT INTO $table ($cols_str) VALUES ($vals_str)";   
-    
-    my $rows = $$self{dbh}->do($query) or die "$!";
-    TRACE("Rowsss ", $rows, $query);
-    return $rows;
 }
 
 1;
