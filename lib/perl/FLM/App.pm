@@ -277,7 +277,8 @@ sub UploadFile($)
         my $file = $$files[ $i ];
         my $file_name = "$$files[ $i ]";
         my $tmp_file_name = $$self{cgi}->tmpFileName($file);
-
+            
+        ASSERT(-e $tmp_file_name, "File does not exists", "SYS61");
         my @file_stat = stat($tmp_file_name);
 
         $self->_CheckUploadedFileSize($tmp_file_name, $file_name);
