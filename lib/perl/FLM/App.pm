@@ -12,11 +12,11 @@ use Try::Tiny;
 use JSON;
 
 our $commands = {
-    upload_file => { proc => \&UploadFile, resp_type => 'json', method => 'POST'},
-    get_files_list => { proc => \&GetFilesList, resp_type => 'json', method => 'GET'},
-    get_file_data => { proc => \&GetFileData, resp_type => 'json', method => 'GET'},
-    delete_file => { proc => \&DeleteFile, resp_type => "json", method => 'DELETE' },
-    download_file => { proc => \&DownloadFile, method => 'GET' },
+    upload_file => { proc => \&UploadFile, resp_type => 'json'},
+    get_files_list => { proc => \&GetFilesList, resp_type => 'json'},
+    get_file_data => { proc => \&GetFileData, resp_type => 'json'},
+    delete_file => { proc => \&DeleteFile, resp_type => "json" },
+    download_file => { proc => \&DownloadFile },
 };
 
 sub new($)
@@ -51,14 +51,10 @@ sub Handler($)
         $$self{forbid_file_types} = defined $$self{forbid_file_types} ? $$self{forbid_file_types} : $self->_GetForbidFileTypes();
         
         my $method = $$self{cgi}->param('method');
-        ASSERT(defined $method, "method is undefined", "SYS01");
+        ASSERT_PEER(defined $method, "method is undefined", "PEER03");
         ASSERT_PEER(defined $$commands{ $method }, "Method not found", "PEER01"); 
 
         my $command = $$commands{ $method };
-
-        ASSERT(defined $$command{ method }, "Undefined command method", "SYS71");
-    
-        ASSERT_USER($ENV{'REQUEST_METHOD'} eq $$command{ method }, "Wrong Request Method", "UI33");
 
         print CGI::header("-charset" => 'utf8');
 
@@ -166,7 +162,7 @@ sub GetFilesList($)
         SELECT *
         FROM files
         WHERE is_deleted IS FALSE
-        ORDER BY inserted_at DESC
+        ORDER BY id
     ");
 
     $sth->execute();
