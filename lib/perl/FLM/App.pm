@@ -137,7 +137,8 @@ sub GetFileData($)
     ASSERT_PEER(defined $file_id, "Missing param file_id", "PEER13");
     
     my $sth = $$self{dbh}->prepare("
-        SELECT F.*
+        SELECT F.*,
+                inserted_at::timestamp(0) AS inserted_at
         FROM files F
         WHERE F.id=?
             AND F.is_deleted IS FALSE
@@ -159,7 +160,8 @@ sub GetFilesList($)
     ASSERT(defined $self, "Undefined self", "SYS31");
     
     my $sth = $$self{dbh}->prepare("
-        SELECT *
+        SELECT *,
+                inserted_at::timestamp(0) AS inserted_at
         FROM files
         WHERE is_deleted IS FALSE
         ORDER BY id

@@ -13,35 +13,56 @@
 </head>
 <body>
 
-<div>
+<div class="container"> 
+    <div class="row">
+        <form class="form-inline">
+          <div class="form-group">
+            <label for="file">Choose file</label>
+            <input type="file" class="form-control-file" id="file">
+          </div>
+          <button type="submit" id="submit" name="submit" class="btn btn-primary">Upload</button>
+        </form>
+    </div>
 
     <div id="flm-error" style="display:none" class="flm-alert alert alert-danger" role="alert">
     </div>    
 
     <div id="flm-success" style="display:none" class="flm-alert alert alert-success" role="alert">
-        Success
     </div>    
+    
+    <div class="row" style="margin-top:20px">
+        <table class="table table-striped">
+          <thead>
+            <tr>
+              <th>File name</th>
+              <th>Created at</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="flm-tbody">
+          </tbody>
+        </table>
 
-    <form>
-      <div class="form-group">
-        <label for="file">Choose file</label>
-        <input type="file" class="form-control-file" id="file">
+    </div>
+    <!-- Modal -->
+    <div class="modal fade" id="fileInfo" tabindex="-1" role="dialog" aria-labelledby="File Information" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="flmFileInfoName"></h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body" id="flmFileInfo">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            <a href="" class="btn btn-primary" id="flmFileDownloadLink">Download</a>
+          </div>
+        </div>
       </div>
-      <button type="submit" id="submit" name="submit" class="btn btn-primary">Upload</button>
-    </form>
-
-    <table class="table table-striped">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>File name</th>
-          <th>Created at</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="flm-tbody">
-      </tbody>
-    </table>
+    </div>
 </div>
 
 <script type="text/javascript">
@@ -50,6 +71,16 @@
     FLM.api_url = "http://46.101.174.93:5556/api";
 
     loadFilesData();
+
+    function _showErrorMsg(msg) {
+        $(".flm-alert").hide();
+        $("#flm-error").text(msg).show();
+    }
+
+    function _showSuccessMsg(msg) {
+        $(".flm-alert").hide();
+        $("#flm-success").text(msg).show();
+    }
 
     function loadFilesData() {
         $.ajax({
@@ -66,8 +97,7 @@
 
                         for(var i = 0; i < res.result.length; i++) {
                             html += '<tr>';
-                            html += '<td scope="row">' + res.result[i].id + '</td>';
-                            html += '<td>' + res.result[i].name + '</td>';
+                            html += '<td><a class="flm-file-info" data-file_id="'+res.result[i].id+'" data-target="#fileInfo" href="#">' + res.result[i].name + '</a></td>';
                             html += '<td>' + res.result[i].inserted_at + '</td>';
                             html += '<td><button type="button" data-file_id="'+res.result[i].id+'" class="btn btn-danger flm-delete-file">Delete</button></td>';
                             html += '</tr>';
@@ -76,16 +106,51 @@
                         $("#flm-tbody").html(html);
 
                     } else {
-                        $(".flm-alert").hide();
-                        $("#flm-error").text(res.status.msg).show();
+                        _showErrorMsg(res.status.msg);
                     }
                 }
             },
             error: function(xhr, textStatus, errorThrown) {
-                
+                _showErrorMsg("Something went wrong, please try again after few minutes.");
             }
         });
     }
+
+    $(document).on("click", ".flm-file-info", function(e) {
+        var file_id = $(this).data("file_id");
+
+        $.ajax({
+            url: FLM.api_url,
+            method: 'GET',
+            data: {
+                method: 'get_file_data',
+                file_id: file_id
+            },
+            success: function(res) {
+                console.log(res);
+                if(typeof res.status !== 'undefined') {
+                    if(res.status.status == "ok") {
+                        $("#fileInfo").modal('show');
+                        $("#flmFileInfoName").text(res.result.name);
+                        $("#flmFileDownloadLink").attr("href", FLM.api_url+'?method=download_file&file_id='+res.result.id);
+
+                        var file_size = parseInt( parseInt(res.result.meta_data.file_size_bytes) / 1024 );
+
+                        var html = '<ul>';
+                        html += '<li>File size: '+file_size+'KB</li>';
+                        html += '<li>MIME Type: '+res.result.meta_data.mime_type+'</li>';
+                        html += '<li>Created at: '+res.result.inserted_at+'</li>';
+                        html += '</ul>';
+
+                        $("#flmFileInfo").html(html);
+                    } else {
+                        $("#fileInfo").modal('hide');
+                        _showErrorMsg(res.status.msg);
+                    }
+                }
+            }
+        });
+    });
 
     $(document).on("click", ".flm-delete-file", function(e) {
         var file_id = $(this).data('file_id');
@@ -101,16 +166,15 @@
                 console.log(res);
                 if(typeof res.status !== 'undefined') {
                     if(res.status.status == "ok") {
-                        $(".flm-alert").hide();
-                        $("#flm-success").text("File is deleted").show();
+                        _showSuccessMsg("File is deleted");
                         loadFilesData();
                     } else {
-                        $(".flm-alert").hide();
-                        $("#flm-error").text(res.status.msg).show();
+                        _showErrorMsg(res.status.msg);
                     }
                 }
             },
             error: function(xhr, textStatus, errorThrown) {
+                _showErrorMsg("Something went wrong, please try again after few minutes.");
                 console.log("Error", textStatus, errorThrown);
             }
         });
@@ -142,17 +206,15 @@
                 console.log("Success ", res);
                 if(typeof res.status !== 'undefined') {
                     if(res.status.status == "ok") {
-                        $(".flm-alert").hide();
-                        $("#flm-success").text("Upload successful").show();
+                        _showSuccessMsg("File uploaded successfully."); 
                         loadFilesData();
                     } else {
-                        $(".flm-alert").hide();
-                        $("#flm-error").text(res.status.msg).show();
+                        _showErrorMsg(res.status.msg);
                     }
                 }
             },
             error: function(xhr, textStatus, errorThrown) {
-                console.log("Err",textStatus, errorThrown);
+                _showErrorMsg("Something went wrong, please try again after few minutes.");
             },
             // Custom XMLHttpRequest
         });
