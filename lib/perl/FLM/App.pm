@@ -302,6 +302,7 @@ sub UploadFile($)
             }),
         });
 
+        TRACE("FileRow ", $row);
         push @$upld_files_arr, {
             tmp_file_path => $tmp_file_name,
             intern_file_name => $intern_file_name
@@ -312,10 +313,22 @@ sub UploadFile($)
  
     for(my $i = 0; $i < @$upld_files_arr; $i++)
     {
-        move($$upld_files_arr[ $i ]{ tmp_file_path }, "$FLM::Config::FILES_DIR/$$upld_files_arr[ $i ]{ intern_file_name }");
+        $self->_MoveFile($$upld_files_arr[ $i ]{ tmp_file_path }, "$FLM::Config::FILES_DIR/$$upld_files_arr[ $i ]{ intern_file_name }");
     }
 
     return $res;
+}
+
+sub _MoveFile($$$)
+{
+    my($self, $file_path_from, $file_path_to) = @_;
+
+    ASSERT(defined $file_path_from, "Undefined file_path_from parameter", "SYS70");
+    ASSERT(defined $file_path_to, "Undefined file_path_to parameter", "SYS71");
+
+    move($file_path_from, $file_path_to);
+
+    return 1;
 }
 
 sub _GetFilePubName($$)

@@ -4,7 +4,7 @@ use warnings;
 use lib qw{../lib/perl ../common/lib/perl};
 use Test::More; 
 use Test::Exception;
-use Test::MockObject;
+use Test::MockObject::Extends;
 use Test::MockModule;
 
 use Data::Dumper;
@@ -13,6 +13,7 @@ require_ok( 'FLM::App' );
 
 my $fetchrow_hashref_arr = [{}];
 my $params_hash = {};
+my $tmp_file_name = "";
 my $returned_rows = 1;
 my $mock_sth;
 my $mock_dbh;
@@ -44,13 +45,34 @@ sub teardown()
                     sub { return $mock_sth }
                     );
 
+    $mock_dbh->mock( 'InsertInto',
+                    sub { 
+                            print STDERR "TESTTTTTT";
+                            print STDERR Dumper $fetchrow_hashref_arr;
+                            return pop @$fetchrow_hashref_arr; 
+                        }
+                    );
+
     $mock_cgi = Test::MockObject->new();
     $mock_cgi->mock( 'param',
                     sub {
                         return $$params_hash{ $_[1] };
                     } );
+    $mock_cgi->mock( 'tmpFileName',
+                    sub {
+                        my $file_name = \$tmp_file_name;
+                        return $$file_name;
+                    }
+                    );
+    
 
     $app = FLM::App->new();
+    $app = Test::MockObject::Extends->new($app);
+   
+    $app->mock('_MoveFile', 
+                sub { return 1; }
+                );
+ 
     $$app{cgi} = $mock_cgi;
     $$app{dbh} = $mock_dbh;
     
@@ -297,5 +319,26 @@ note "DeleteFile Test";
     dies_ok{ $app->DeleteFile() } 'die test, file not found';
 
     teardown(); 
+
+note "UploadFile Test";
+    $params_hash = {
+        file => './files/apple.png'
+    };
+    $tmp_file_name = './files/apple.png';
+
+    $fetchrow_hashref_arr = [
+    {
+        id => 13,
+        name => "apple.png",
+        pub_name => "Apple-Logo-Png-Download (1).png",
+        orig_name => "Apple-Logo-Png-Download.png",
+        inserted_at => "2017-08-20 11:09:34.625098",
+        meta_data_json => '{"file_ctime":1503227374,"ext":".png","file_mtime":1503227374,"file_atime":1503227374,"file_size_bytes":929419,"mime_type":"image/png"}',
+    },{},{}];
+    $returned_rows = 1;
+    #my $test_row = $$app{dbh}->InsertInto('files', {});
+    #print Dumper $test_row;
+
+    lives_ok{ $app->UploadFile() } 'Lives ok test'; 
 
 done_testing();
