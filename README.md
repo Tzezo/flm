@@ -37,6 +37,7 @@ Listen < PORT > # Listen 5555
 ```
 
 Your application URL: [http://< host >:< port >/index.html]()
+
 Your API URL: [http://< host >:< port >/api]()
 
 ## CONFIGURATION
@@ -98,6 +99,7 @@ If setting `$FORBIDDEN_FILE_EXT` is filled the application will check the file b
 Arguments can be passed as GET or POST params, but not a mix. If the HTTP status is 200 OK the response will contains attachment with file name and mime type or JSON object, which will always contain a top-level JSON object `status`. Status object will always contain property `status`, indicating success or failure. 
 
 On success `status` will be `ok`.
+
 Example:
 ```json
 {
@@ -112,6 +114,7 @@ On failure `status` will be `peer_err`, `sys_err` or `user_err`. Also top-level 
 
 ##### peer_error
 This type of errors means protocol error or invalid request. The system can not recover after retry.
+
 Example:
 ```json
 {
@@ -125,6 +128,7 @@ Example:
 
 ##### sys_err
 This type of errors most often means temporary errors and in most cases the system will recover after retry.
+
 Example:
 ```json
 {
@@ -138,6 +142,7 @@ Example:
 
 ##### user_err
 This type of errors means that the error is in the end user. For example, reached file size limit or reached max number of allowed uploaded files.
+
 Example:
 ```json
 {
@@ -179,6 +184,7 @@ Example:
 
 ###### Response
 Array of **file_object**
+
 Example:
 ```json
 {
@@ -217,6 +223,7 @@ curl -X POST -F file=@apple.png -F method="upload_file" http://<YOUR_API_URL>
 
 ###### Response
 Array of **file_object**
+
 Example:
 ```json
 {
@@ -269,6 +276,7 @@ curl -X GET  http://< YOUR API URL >?method=get_files_list
 
 ###### Response
 **file_object**
+
 Example:
 ```json
 {
@@ -306,6 +314,7 @@ curl -X GET "http://< YOUR API URL >?method=get_file_data&file_id=15"
 
 ###### Response
 **file_object**
+
 Example:
 ```json
 {
