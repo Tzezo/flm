@@ -1,6 +1,30 @@
 package FLM::Common::Errors;
 use strict;
 
+=pod
+=head1 NAME
+
+FLM::Common::Errors
+
+=head2 SYNOPSIS
+    
+    ASSERT($cond, "Message", "Code");
+    ASSERT_PEER($cond, "Message", "Code");
+    ASSERT_USER($cond, "Message", "Code");
+    TRACE("Param", $hashref, $arrref, $string); #Print on STDERR all passed params, accepts list of params. Uses Data::Dumper so there is no problem to pass ARRAYREF or HASHREF as parameters.     
+
+=head2 DESCRIPTION
+
+Provides three types of exceptions and one trace function. Exceptions methods works like asserts i.e. accepts as a parameter some condition if condition is false, throws a exception.
+The exceptions are three types:
+    SYSERR - in most cases means temporary error
+    PEERERR - protocol error or invalid params, this exception type must be used for validating API input params.
+    USERERR - end user error for example "Reached max file size"
+   
+All methods in this module are static.
+
+=cut
+
 use Data::Dumper;
 
 sub TRACE(@);

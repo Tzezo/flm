@@ -1,6 +1,20 @@
 package FLM::Common::DBIHelper;
 use strict;
 
+=pod
+=head1 NAME
+
+FLM::Common::DBIHelper
+
+=head2 DESCRIPTION
+
+Provides some helper functionality for DBI. 
+    FLM::Common::DBIHelper->connect($params); #DBI PG connection without transactions
+    FLM::Common::DBIHelper->connect_transact($params); #DBI PG connection with transactions with default DBI isolation level SERIALIZABLE
+    $dbi->InsertInto($table_name, {col => $val}); #Generate and execute Insert query from hashref. Returns inserted row as hashref.
+
+=cut
+
 use DBI;
 use FLM::Common::Errors; 
 
@@ -37,6 +51,7 @@ sub connect_transact($$)
 
 package FLM::Common::DBIHelper::db;
 use strict;
+
 use base qw(DBI::db);
 
 use FLM::Common::Errors; 

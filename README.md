@@ -5,13 +5,13 @@
 3. Create database and user.
 4. Execute the following sql script: \i setup/db/db.sql in your database. The script will create needed tables.
 
-Example Apache2 configuration under mod_perl, you need to replace <DIR TO PROJECT> AND <PORT> with yours.
+Example Apache2 configuration under mod_perl, you need to replace < DIR TO PROJECT > AND < PORT > with yours.
 If you do not have installed mod_perl you need to execute the following command apt-get install libapache2-mod-perl2.
 
 ```apache
-Listen <PORT> # Listen 5555
+Listen < PORT > # Listen 5555
 
-<VirtualHost  _default_:<PORT>>
+<VirtualHost  _default_:< PORT >>
     PerlWarn On
     PerlOptions +Parent -InheritSwitches
 
@@ -22,22 +22,22 @@ Listen <PORT> # Listen 5555
            PerlSendHeader On
         </Files>
 
-    PerlSwitches -I<DIR TO PROJECT>/lib/perl -I<DIR TO PROJECT>/common/lib/perl
+    PerlSwitches -I< DIR TO PROJECT >/lib/perl -I< DIR TO PROJECT >/common/lib/perl
 
-    <Directory "<DIR TO PROJECT>/www-root" >
+    <Directory "< DIR TO PROJECT >/www-root" >
         Order deny,allow
         Deny from all
         Allow from all
         DirectoryIndex app.pl
     </directory>
 
-    Alias /api <DIR TO PROJECT>/www-root/app.pl
-    Alias / <DIR TO PROJECT>/www-root/
+    Alias /api < DIR TO PROJECT >/www-root/app.pl
+    Alias / < DIR TO PROJECT >/www-root/
 </VirtualHost>
 ```
 
-Your application URL: [http://<host>:<port>/index.html]()
-Your API URL: [http://<host>:<port>/api]()
+Your application URL: [http://< host >:< port >/index.html]()
+Your API URL: [http://< host >:< port >/api]()
 
 ## CONFIGURATION
 1. Go to lib/perl/FLM/ directory. Copy Config.pm.Sample with new file name Config.pm in the same dir and open the file with a text editor of your choice.
@@ -53,6 +53,46 @@ Your API URL: [http://<host>:<port>/api]()
 * $FORBIDDEN_FILE_EXT - Forbidden file types. The check is by file extension and file meta data. 
 * $MAX_FILE_SIZE - Max allowed file size in bytes for file.
 * $MAX_UPLOADED_FILES - Max allowed number of uploaded files.
+
+## MODULES
+#### FLM::Common::DBIHelper
+Provides some helper functionality for DBI.
+```perl 
+FLM::Common::DBIHelper->connect($params); #DBI PG connection without transactions
+
+FLM::Common::DBIHelper->connect_transact($params); #DBI PG connection with transactions with default DBI isolation level SERIALIZABLE
+
+$dbi->InsertInto($table_name, {col => $val}); #Generate and execute Insert query from hashref. Returns inserted row as hashref.
+```
+
+#### FLM::Common::Errors
+
+##### Synopsis
+```perl
+ASSERT($cond, "Message", "Code");
+ASSERT_PEER($cond, "Message", "Code");
+ASSERT_USER($cond, "Message", "Code");
+TRACE("Param", $hashref, $arrref, $string); #Print on STDERR all passed params, accepts list of params. Uses Data::Dumper so there is no problem to pass ARRAYREF or HASHREF as parameters.
+```
+Provides three types of exceptions and one trace function. Exceptions methods works like asserts i.e. accepts as a parameter some condition if condition is false, throws a exception.
+The exceptions are three types:
+1. SYSERR - in most cases means temporary error
+2. PEERERR - protocol error or invalid params, this exception type must be used for validating API input params.
+3. USERERR - end user error for example "Reached max file size"
+
+All methods in this module are static.
+
+#### FLM::App
+##### API
+Handler method is a API entry point.
+Supported API methods are in global hashref `$commands`.
+##### DataBase
+Uses FLM::Common::DBIHelper->connect_transact so everything is in transaction, isolation level SERIALIZABLE.
+##### Exceptions
+There is three type of exceptions: SYSERR, PEERERR, USERERR provied from FLM::Common:Errors module. Exceptions are processed in the Handler method.
+##### Other information
+If setting `$FORBIDDEN_FILE_EXT` is filled the application will check the file by extension and meta data, so the application can validate file which is without extension in the name.
+
 
 ## API DOCUMENTATION
 Arguments can be passed as GET or POST params, but not a mix. If the HTTP status is 200 OK the response will contains attachment with file name and mime type or JSON object, which will always contain a top-level JSON object `status`. Status object will always contain property `status`, indicating success or failure. 
@@ -192,7 +232,7 @@ curl -X POST -F file=@apple.png -F method="upload_file" http://<YOUR_API_URL>
 
 ###### CURL Example
 ```curl
-curl -X GET  http://<YOUR API URL>?method=get_files_list
+curl -X GET  http://< YOUR API URL >?method=get_files_list
 ```
 
 
@@ -227,7 +267,7 @@ curl -X GET  http://<YOUR API URL>?method=get_files_list
 
 ###### CURL Example
 ```curl
-curl -X GET "http://<YOUR API URL>?method=get_file_data&file_id=15"
+curl -X GET "http://< YOUR API URL >?method=get_file_data&file_id=15"
 ```
 
 
@@ -262,7 +302,7 @@ curl -X GET "http://<YOUR API URL>?method=get_file_data&file_id=15"
 
 ###### CURL Example
 ```curl
-curl -X GET "http://<YOUR API URL>?method=delete_file&file_id=15"
+curl -X GET "http://< YOUR API URL >?method=delete_file&file_id=15"
 ```
 
 
@@ -281,6 +321,6 @@ atachment with file name and mime type in http headers.
 
 ###### CURL Example
 ```curl
-curl -X GET "http://<YOUR API URL>?method=download_file&file_id=53"
+curl -X GET "http://< YOUR API URL >?method=download_file&file_id=53"
 ```
 

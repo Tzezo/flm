@@ -1,6 +1,29 @@
 package FLM::App;
 use strict;
 
+=pod
+=head1 NAME
+
+FLM::App
+
+=head2 DESCRIPTION
+
+=head3 API
+Handler method is a API entry point.
+Supported API methods are in global hashref $commands.
+
+=head3 DataBase
+Uses FLM::Common::DBIHelper->connect_transact so everything is in transaction, isolation level SERIALIZABLE.
+
+=head3 Exceptions
+There is three type of exceptions: SYSERR, PEERERR, USERERR provied from FLM::Common:Errors module. Exceptions are processed in the Handler method. 
+
+=head3 Other information
+
+If setting $FORBIDDEN_FILE_EXT is filled the application will check the file by extension and meta data, so the application can validate file which is without extension in the name.
+
+=cut
+
 use FLM::Config;
 use FLM::Common::Errors;
 use CGI;
