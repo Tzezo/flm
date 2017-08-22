@@ -254,8 +254,6 @@ sub UploadFile($)
 {
     my($self) = @_;
 
-    #TODO - Add uuid for files as pub id
-     
     ASSERT_PEER(defined $$self{cgi}->param('file'), "File parameter is not defined", "PEER10");
    
     my $files = $$self{cgi}->param('file');
@@ -304,7 +302,6 @@ sub UploadFile($)
             }),
         });
 
-        TRACE("FileRow ", $row);
         push @$upld_files_arr, {
             tmp_file_path => $tmp_file_name,
             intern_file_name => $intern_file_name

@@ -65,9 +65,19 @@ sub ASSERT_USER($$$;@)
 
 sub TRACE(@)
 {
-    print STDERR "TRACE----->\n";
-    print STDERR Dumper @_;
-    print STDERR "END TRACE<------\n";
+    my $trace_enabled = 1;
+
+    if(defined $FLM::Config::TRACE_ENABLED)
+    {
+        $trace_enabled = $FLM::Config::TRACE_ENABLED;
+    }    
+
+    if($trace_enabled)
+    {
+        print STDERR "TRACE----->\n";
+        print STDERR Dumper @_;
+        print STDERR "END TRACE<------\n";
+    }
 }
 
 sub get_stack()

@@ -9,6 +9,7 @@ use Test::MockModule;
 
 use Data::Dumper;
 
+
 require_ok( 'FLM::App' );
 
 my $fetchrow_hashref_arr = [{}];
@@ -19,6 +20,8 @@ my $mock_sth;
 my $mock_dbh;
 my $mock_cgi;
 my $app;
+
+$FLM::Config::TRACE_ENABLED = 0;
 
 sub teardown()
 {
@@ -47,8 +50,6 @@ sub teardown()
 
     $mock_dbh->mock( 'InsertInto',
                     sub { 
-                            print STDERR "TESTTTTTT";
-                            print STDERR Dumper $fetchrow_hashref_arr;
                             return pop @$fetchrow_hashref_arr; 
                         }
                     );
@@ -338,7 +339,12 @@ note "UploadFile Test";
     $returned_rows = 1;
     #my $test_row = $$app{dbh}->InsertInto('files', {});
     #print Dumper $test_row;
-
     lives_ok{ $app->UploadFile() } 'Lives ok test'; 
+
+    $params_hash = {};
+
+    dies_ok{ $app->UploadFile() } 'die test, missing file param';
+
+    teardown();
 
 done_testing();
