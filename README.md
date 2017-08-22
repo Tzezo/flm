@@ -1,6 +1,6 @@
 # FLM
 ## INSTALATION
-1. Install PostgreSQL database.
+1. Install PostgreSQL 9.4+ database.
 2. Install all packages from setup/packages.sh
 3. Create database and user.
 4. Execute the following sql script: \i setup/db/db.sql in your database. The script will create needed tables.
