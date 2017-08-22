@@ -42,17 +42,17 @@ Your API URL: [http://<host>:<port>/api]()
 ## CONFIGURATION
 1. Go to lib/perl/FLM/ directory. Copy Config.pm.Sample with new file name Config.pm in the same dir and open the file with a text editor of your choice.
 2. Setup db credentials with yours:
-*$dbi_dbName - Name of the dabase
-*$dbi_dbHost - DB Host
-*$dbi_dbUser - DB User
-*$dbi_dbAuth - DB Password
-*$dbi_dbPort - DB Port
+* $dbi_dbName - Name of the dabase
+* $dbi_dbHost - DB Host
+* $dbi_dbUser - DB User
+* $dbi_dbAuth - DB Password
+* $dbi_dbPort - DB Port
 3. Setup directory where files will be stored:
-*$FILES_DIR
+* $FILES_DIR
 4. Play with other configurations:
-*$FORBIDDEN_FILE_EXT - Forbidden file types. The check is by file extension and file meta data. 
-*$MAX_FILE_SIZE - Max allowed file size in bytes for file.
-*$MAX_UPLOADED_FILES - Max allowed number of uploaded files.
+* $FORBIDDEN_FILE_EXT - Forbidden file types. The check is by file extension and file meta data. 
+* $MAX_FILE_SIZE - Max allowed file size in bytes for file.
+* $MAX_UPLOADED_FILES - Max allowed number of uploaded files.
 
 ## API DOCUMENTATION
 Arguments can be passed as GET or POST params, but not a mix. If the HTTP status is 200 OK the response will contains attachment with file name and mime type or JSON object, which will always contain a top-level JSON object `status`. Status object will always contain property `status`, indicating success or failure. 
