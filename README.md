@@ -64,7 +64,7 @@ Example:
     "status": {
         "status":"ok"
     },
-    result: {...}
+    "result": {...}
 }
 ```
 
