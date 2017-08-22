@@ -149,6 +149,26 @@ Example:
 }
 ```
 
+#### API RESPONSE OBJECTS
+##### file_object
+| Property | Type | Required | Description |
+| ------ | ------ | ------ | ------ |
+| id | int | Required | File ID in the system |
+| name | str | Required | FIle name | 
+| inserted_at | timestamp | Required | File creation date in the system |
+| meta_data | meta_data_object | Required | File meta data |
+
+##### meta_data_object
+| Property | Type | Required | Description |
+| ------ | ------ | ------ | ------ |
+| ext | str | Optional | File extension |
+| mime_type | str | Optional | File MIME Type |
+| file_ctime | unix timestamp | Required | File creation time in the system | 
+| file_mtime | unix timestamp | Required | File modification time in the system |
+| file_atime | unix timestamp | Required | File access time in the system |
+| file_size_bytes | int | Required | File size |
+
+
 #### API METHODS
 ##### upload_file
 ###### Input params
@@ -158,6 +178,8 @@ Example:
 | file | ... | Required | File contents via multipart/form-data |
 
 ###### Response
+Array of **file_object**
+Example:
 ```json
 {
     "status":{
@@ -194,6 +216,8 @@ curl -X POST -F file=@apple.png -F method="upload_file" http://<YOUR_API_URL>
 | method | get_files_list | Required | |
 
 ###### Response
+Array of **file_object**
+Example:
 ```json
 {
   "status": {
@@ -244,6 +268,8 @@ curl -X GET  http://< YOUR API URL >?method=get_files_list
 | file_id | 13 | Required | File id |
 
 ###### Response
+**file_object**
+Example:
 ```json
 {
   "status": {
@@ -279,6 +305,8 @@ curl -X GET "http://< YOUR API URL >?method=get_file_data&file_id=15"
 | file_id | 13 | Required | File id |
 
 ###### Response
+**file_object**
+Example:
 ```json
 {
   "status": {
@@ -315,7 +343,7 @@ curl -X GET "http://< YOUR API URL >?method=delete_file&file_id=15"
 | file_id | 13 | Required | File id |
 
 ###### Response
-```json
+```text
 atachment with file name and mime type in http headers.
 ```
 
